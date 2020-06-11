@@ -3,6 +3,7 @@ package chiprometheus
 
 import (
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/middleware"
@@ -14,8 +15,8 @@ var (
 )
 
 const (
-	reqsName    = "chi_requests_total"
-	latencyName = "chi_request_duration_milliseconds"
+	reqsName    = "http_requests_total"
+	latencyName = "http_request_duration_milliseconds"
 )
 
 // Middleware is a handler that exposes prometheus metrics for the number of requests,
@@ -34,7 +35,7 @@ func NewMiddleware(name string, buckets ...float64) func(next http.Handler) http
 			Help:        "How many HTTP requests processed, partitioned by status code, method and HTTP path.",
 			ConstLabels: prometheus.Labels{"service": name},
 		},
-		[]string{"code", "method", "path"},
+		[]string{"code", "status", "method", "path"},
 	)
 	prometheus.MustRegister(m.reqs)
 
@@ -47,7 +48,7 @@ func NewMiddleware(name string, buckets ...float64) func(next http.Handler) http
 		ConstLabels: prometheus.Labels{"service": name},
 		Buckets:     buckets,
 	},
-		[]string{"code", "method", "path"},
+		[]string{"code", "status", "method", "path"},
 	)
 	prometheus.MustRegister(m.latency)
 	return m.handler
@@ -58,8 +59,8 @@ func (c Middleware) handler(next http.Handler) http.Handler {
 		start := time.Now()
 		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 		next.ServeHTTP(ww, r)
-		c.reqs.WithLabelValues(http.StatusText(ww.Status()), r.Method, r.URL.Path).Inc()
-		c.latency.WithLabelValues(http.StatusText(ww.Status()), r.Method, r.URL.Path).Observe(float64(time.Since(start).Nanoseconds()) / 1000000)
+		c.reqs.WithLabelValues(strconv.Itoa(ww.Status()), http.StatusText(ww.Status()), r.Method, r.URL.Path).Inc()
+		c.latency.WithLabelValues(strconv.Itoa(ww.Status()), http.StatusText(ww.Status()), r.Method, r.URL.Path).Observe(float64(time.Since(start).Nanoseconds()) / 1000000)
 	}
 	return http.HandlerFunc(fn)
 }
